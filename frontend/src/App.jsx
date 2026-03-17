@@ -3,18 +3,21 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AuthProvider, { AuthContext } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import InteractiveEffects from './components/InteractiveEffects';
 import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import CreateSnippet from './pages/CreateSnippet';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import SnippetDetail from './pages/SnippetDetail';
 
 // ── Loading screen shown while localStorage session is being restored ──
 const LoadingScreen = () => (
-  <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-    <div className="text-center">
-      <div className="text-3xl font-bold text-indigo-400 mb-2">&lt;/&gt;</div>
-      <p className="text-slate-400 text-sm">Loading SnipForge...</p>
+  <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+    <div className="text-center animate-pulse">
+      <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
+        Initializing <span className="text-indigo-500">SnipForge</span>
+      </span>
     </div>
   </div>
 );
@@ -39,11 +42,13 @@ const App = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <div className="min-h-screen bg-slate-900 flex flex-col">
+        <div className="app-shell min-h-screen bg-slate-900 flex flex-col relative isolate">
+          <InteractiveEffects />
           <Navbar />
-          <main className="flex-1">
+          <main className="flex-1 animate-page-fade relative z-10">
             <Routes>
               <Route path="/" element={<Home />} />
+              <Route path="/snippet/:id" element={<SnippetDetail />} />
 
               <Route
                 path="/login"

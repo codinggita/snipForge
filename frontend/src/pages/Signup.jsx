@@ -1,209 +1,142 @@
 import { useState, useContext } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+import { fetchJson } from '../utils/api';
 
 const Signup = () => {
-  const { login } = useContext(AuthContext);
-  const navigate = useNavigate();
-
-  const [form, setForm] = useState({
+  const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
-    confirmPassword: '',
+    confirmPassword: ''
   });
-  const [loading, setLoading] = useState(false);
+  
   const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  const { login } = useContext(AuthContext);
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // ── Client-side validation ──
-    if (form.name.trim().length < 2) {
-      setError('Name must be at least 2 characters.');
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(form.email)) {
-      setError('Please enter a valid email address.');
-      return;
-    }
-    if (form.password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
-    if (form.password !== form.confirmPassword) {
-      setError('Passwords do not match.');
+    
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
     setLoading(true);
     setError('');
-
+    
     try {
-      const res = await fetch(`${BASE_URL}/api/auth/signup`, {
+      const { response, json } = await fetchJson('/api/auth/signup', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: form.name.trim(),
-          email: form.email.trim(),
-          password: form.password,
-        }),
+          name: formData.name,
+          email: formData.email,
+          password: formData.password
+        })
       });
 
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.message || 'Signup failed');
+      if (response.ok && json.success) {
+        login(json.data.user, json.data.token);
+        navigate('/dashboard');
+      } else {
+        setError(json.message || 'Registration failed');
       }
-
-      login(json.data.user, json.data.token);
-      navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'An error occurred during signup.');
+      setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Compute password strength ──
-  const pwdLen = form.password.length;
-  let strengthLabel = '';
-  let strengthColor = '';
-  let strengthWidth = '';
-
-  if (pwdLen > 0) {
-    if (pwdLen < 6) {
-      strengthLabel = 'Weak';
-      strengthColor = 'bg-red-500';
-      strengthWidth = 'w-1/3';
-    } else if (pwdLen >= 6 && pwdLen <= 9) {
-      strengthLabel = 'Fair';
-      strengthColor = 'bg-yellow-500';
-      strengthWidth = 'w-2/3';
-    } else {
-      strengthLabel = 'Strong';
-      strengthColor = 'bg-green-500';
-      strengthWidth = 'w-full';
-    }
-  }
-
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 w-full max-w-md">
-        
-        {/* ── HEADER ── */}
-        <div className="text-center mb-8">
-          <div className="text-indigo-400 text-3xl font-bold mb-2">&lt;/&gt;</div>
-          <h1 className="text-2xl font-bold text-white mt-2">Create your account</h1>
-          <p className="text-slate-400 text-sm mt-1">Join thousands of developers on SnipForge</p>
+    <div className="container-page py-20 flex flex-col items-center">
+      <div className="w-full max-w-md animate-fade-in">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-black text-white tracking-tighter uppercase mb-4">Join SnipForge</h1>
+          <p className="text-slate-500 font-medium">Start your professional code collection.</p>
         </div>
 
-        {/* ── ERROR DISPLAY ── */}
-        {error && (
-          <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-3 text-red-400 text-sm mb-4">
-            {error}
-          </div>
-        )}
+        <form onSubmit={handleSubmit} className="p-10 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-8">
+          {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm font-bold">
+              {error}
+            </div>
+          )}
 
-        {/* ── SIGNUP FORM ── */}
-        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="label">Name</label>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Full Name</label>
             <input
               type="text"
               name="name"
-              value={form.name}
+              className="input w-full"
+              placeholder="John Doe"
+              value={formData.name}
               onChange={handleChange}
-              placeholder="Roy Het"
-              className="input"
+              required
             />
           </div>
 
           <div>
-            <label className="label">Email address</label>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Email Address</label>
             <input
               type="email"
               name="email"
-              value={form.email}
+              className="input w-full"
+              placeholder="name@company.com"
+              value={formData.email}
               onChange={handleChange}
-              placeholder="you@example.com"
-              className="input"
+              required
             />
           </div>
 
           <div>
-            <label className="label">Password</label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                name="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="********"
-                className="input pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
-                title={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? '🙈' : '👁'}
-              </button>
-            </div>
-            
-            {/* ── PASSWORD STRENGTH INDICATOR ── */}
-            {pwdLen > 0 && (
-              <div className="mt-2">
-                <div className="h-1 rounded-full bg-slate-700">
-                  <div className={`h-full rounded-full transition-all duration-300 ${strengthColor} ${strengthWidth}`} />
-                </div>
-                <p className={`text-xs mt-1 text-${strengthColor.split('-')[1]}-400`}>
-                  {strengthLabel}
-                </p>
-              </div>
-            )}
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Password</label>
+            <input
+              type="password"
+              name="password"
+              className="input w-full"
+              placeholder="••••••••"
+              value={formData.password}
+              onChange={handleChange}
+              required
+            />
           </div>
 
           <div>
-            <label className="label">Confirm Password</label>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Confirm Password</label>
             <input
-              type={showPassword ? 'text' : 'password'}
+              type="password"
               name="confirmPassword"
-              value={form.confirmPassword}
+              className="input w-full"
+              placeholder="••••••••"
+              value={formData.confirmPassword}
               onChange={handleChange}
-              placeholder="********"
-              className="input"
+              required
             />
           </div>
 
           <button
             type="submit"
+            className="w-full py-4 bg-indigo-600 rounded-2xl text-white font-bold text-lg hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-600/20 active:scale-95 disabled:opacity-50"
             disabled={loading}
-            className="btn-primary w-full"
           >
-            {loading ? 'Creating account...' : 'Sign Up'}
+            {loading ? 'Creating Account...' : 'Get Started'}
           </button>
+
+          <p className="text-center text-slate-500 text-sm font-medium pt-4">
+            Already have an account?{' '}
+            <Link to="/login" className="text-indigo-400 font-bold hover:text-indigo-300 transition-colors">Sign in</Link>
+          </p>
         </form>
-
-        {/* ── BOTTOM LINK ── */}
-        <div className="text-center text-slate-400 text-sm mt-6">
-          Already have an account?{' '}
-          <Link to="/login" className="text-indigo-400 hover:text-indigo-300">
-            Log In
-          </Link>
-        </div>
-
       </div>
     </div>
   );
