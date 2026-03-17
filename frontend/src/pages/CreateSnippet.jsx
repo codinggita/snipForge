@@ -2,8 +2,7 @@ import { useState, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import SnippetForm from '../components/SnippetForm';
-
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+import { fetchJson } from '../utils/api';
 
 const CreateSnippet = () => {
   const { token } = useContext(AuthContext);
@@ -17,7 +16,7 @@ const CreateSnippet = () => {
     setError('');
 
     try {
-      const res = await fetch(`${BASE_URL}/api/snippets`, {
+      const { response, json } = await fetchJson('/api/snippets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -26,9 +25,7 @@ const CreateSnippet = () => {
         body: JSON.stringify(formData)
       });
 
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
+      if (!response.ok || !json.success) {
         throw new Error(json.message || 'Failed to create snippet.');
       }
 

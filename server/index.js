@@ -20,7 +20,9 @@ connectDB();
 const app = express();
 
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    callback(null, true);
+  },
   credentials: true
 }));
 
@@ -110,6 +112,15 @@ const SnippetSchema = new mongoose.Schema({
     ref: 'User',
     default: []
   },
+  ratings: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    value: { type: Number, required: true, min: 1, max: 5 }
+  }],
+  comments: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    text: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+  }],
   createdAt: {
     type: Date,
     default: Date.now
@@ -258,11 +269,14 @@ app.get('/api/snippets/my', protect, async (req, res) => {
     const totalSnippets = await Snippet.countDocuments(query);
     const snippets = await Snippet.find(query)
       .populate('author', 'name email')
+      .populate('comments.user', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
     const totalPages = Math.ceil(totalSnippets / limit);
+
+    const allLanguages = await Snippet.distinct('language', { author: req.user._id });
 
     return res.status(200).json({
       success: true,
@@ -270,7 +284,8 @@ app.get('/api/snippets/my', protect, async (req, res) => {
         snippets,
         totalPages,
         currentPage: page,
-        totalSnippets
+        totalSnippets,
+        allLanguages
       }
     });
   } catch (error) {
@@ -292,17 +307,21 @@ app.get('/api/snippets', async (req, res) => {
       ];
     }
     if (req.query.language) {
-      query.language = req.query.language;
+      // Use case-insensitive exact match for language
+      query.language = { $regex: `^${req.query.language}$`, $options: 'i' };
     }
 
     const totalSnippets = await Snippet.countDocuments(query);
     const snippets = await Snippet.find(query)
       .populate('author', 'name email')
+      .populate('comments.user', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
     const totalPages = Math.ceil(totalSnippets / limit);
+
+    const allLanguages = await Snippet.distinct('language');
 
     return res.status(200).json({
       success: true,
@@ -310,7 +329,8 @@ app.get('/api/snippets', async (req, res) => {
         snippets,
         totalPages,
         currentPage: page,
-        totalSnippets
+        totalSnippets,
+        allLanguages
       }
     });
   } catch (error) {
@@ -320,7 +340,9 @@ app.get('/api/snippets', async (req, res) => {
 
 app.get('/api/snippets/:id', async (req, res) => {
   try {
-    const snippet = await Snippet.findById(req.params.id).populate('author', 'name email');
+    const snippet = await Snippet.findById(req.params.id)
+      .populate('author', 'name email')
+      .populate('comments.user', 'name');
     if (!snippet) {
       return res.status(404).json({ success: false, message: 'Snippet not found' });
     }
@@ -351,6 +373,7 @@ app.post('/api/snippets', protect, async (req, res) => {
     });
 
     await snippet.populate('author', 'name email');
+    await snippet.populate('comments.user', 'name');
 
     return res.status(201).json({ success: true, data: { snippet } });
   } catch (error) {
@@ -375,7 +398,7 @@ app.put('/api/snippets/:id', protect, async (req, res) => {
       req.params.id,
       { title, description, language, tags, code },
       { new: true, runValidators: true }
-    ).populate('author', 'name email');
+    ).populate('author', 'name email').populate('comments.user', 'name');
 
     return res.status(200).json({ success: true, data: { snippet: updatedSnippet } });
   } catch (error) {
@@ -426,12 +449,75 @@ app.patch('/api/snippets/:id/bookmark', protect, async (req, res) => {
 
     await snippet.save();
     await snippet.populate('author', 'name email');
+    await snippet.populate('comments.user', 'name');
 
     return res.status(200).json({ success: true, data: { snippet } });
   } catch (error) {
     if (error.name === 'CastError') {
       return res.status(404).json({ success: false, message: 'Snippet not found' });
     }
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/snippets/:id/comment', protect, async (req, res) => {
+  try {
+    const snippet = await Snippet.findById(req.params.id);
+    if (!snippet) {
+      return res.status(404).json({ success: false, message: 'Snippet not found' });
+    }
+
+    const { text } = req.body;
+    if (!text) {
+      return res.status(400).json({ success: false, message: 'Comment text is required' });
+    }
+
+    snippet.comments.push({
+      user: req.user._id,
+      text
+    });
+
+    await snippet.save();
+    await snippet.populate('author', 'name email');
+    await snippet.populate('comments.user', 'name');
+
+    return res.status(201).json({ success: true, data: { snippet } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/snippets/:id/rate', protect, async (req, res) => {
+  try {
+    const snippet = await Snippet.findById(req.params.id);
+    if (!snippet) {
+      return res.status(404).json({ success: false, message: 'Snippet not found' });
+    }
+
+    const { value } = req.body;
+    if (!value || value < 1 || value > 5) {
+      return res.status(400).json({ success: false, message: 'Valid rating (1-5) is required' });
+    }
+
+    const existingRatingIndex = snippet.ratings.findIndex(r => r.user.toString() === req.user._id.toString());
+    
+    if (existingRatingIndex >= 0) {
+      // Update existing rating
+      snippet.ratings[existingRatingIndex].value = value;
+    } else {
+      // Add new rating
+      snippet.ratings.push({
+        user: req.user._id,
+        value
+      });
+    }
+
+    await snippet.save();
+    await snippet.populate('author', 'name email');
+    await snippet.populate('comments.user', 'name');
+
+    return res.status(200).json({ success: true, data: { snippet } });
+  } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 });

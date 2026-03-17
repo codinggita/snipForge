@@ -1,128 +1,94 @@
 import { useState, useContext } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+import { fetchJson } from '../utils/api';
 
 const Login = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-
-  const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!form.email.trim() || !form.password.trim()) {
-      setError('Both email and password are required.');
-      return;
-    }
-
     setLoading(true);
     setError('');
-
+    
     try {
-      const res = await fetch(`${BASE_URL}/api/auth/login`, {
+      const { response, json } = await fetchJson('/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(form),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
       });
 
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.message || 'Invalid credentials');
+      if (response.ok && json.success) {
+        login(json.data.user, json.data.token);
+        navigate('/dashboard');
+      } else {
+        setError(json.message || 'Login failed');
       }
-
-      login(json.data.user, json.data.token);
-      navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'An error occurred during login.');
+      setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 w-full max-w-md">
-        
-        {/* ── HEADER ── */}
-        <div className="text-center mb-8">
-          <div className="text-indigo-400 text-3xl font-bold mb-2">&lt;/&gt;</div>
-          <h1 className="text-2xl font-bold text-white mt-2">Welcome back</h1>
-          <p className="text-slate-400 text-sm mt-1">Sign in to your SnipForge account</p>
+    <div className="container-page py-20 flex flex-col items-center">
+      <div className="w-full max-w-md animate-fade-in">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-black text-white tracking-tighter uppercase mb-4">Welcome Back</h1>
+          <p className="text-slate-500 font-medium">Access your personal code repository.</p>
         </div>
 
-        {/* ── ERROR DISPLAY ── */}
-        {error && (
-          <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-3 text-red-400 text-sm mb-4">
-            {error}
-          </div>
-        )}
+        <form onSubmit={handleSubmit} className="p-10 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-8">
+          {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm font-bold">
+              {error}
+            </div>
+          )}
 
-        {/* ── LOGIN FORM ── */}
-        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="label">Email address</label>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Email Address</label>
             <input
               type="email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-              placeholder="you@example.com"
-              className="input"
+              className="input w-full"
+              placeholder="name@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
             />
           </div>
 
           <div>
-            <label className="label">Password</label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                name="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="********"
-                className="input pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
-                title={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? '🙈' : '👁'}
-              </button>
-            </div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Password</label>
+            <input
+              type="password"
+              className="input w-full"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
           </div>
 
           <button
             type="submit"
+            className="w-full py-4 bg-indigo-600 rounded-2xl text-white font-bold text-lg hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-600/20 active:scale-95 disabled:opacity-50"
             disabled={loading}
-            className="btn-primary w-full"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Authenticating...' : 'Sign In'}
           </button>
+
+          <p className="text-center text-slate-500 text-sm font-medium pt-4">
+            New to SnipForge?{' '}
+            <Link to="/signup" className="text-indigo-400 font-bold hover:text-indigo-300 transition-colors">Create account</Link>
+          </p>
         </form>
-
-        {/* ── BOTTOM LINK ── */}
-        <div className="text-center text-slate-400 text-sm mt-6">
-          Don't have an account?{' '}
-          <Link to="/signup" className="text-indigo-400 hover:text-indigo-300">
-            Sign Up
-          </Link>
-        </div>
-
       </div>
     </div>
   );
